@@ -1,0 +1,9 @@
+# Sipar Security — Version 3.0
+# Install with:
+#   Linux/Termux : pip3 install -r requirements.txt --break-system-packages
+#   Windows      : pip install -r requirements.txt
+
+flask>=2.0
+requests>=2.28
+scapy>=2.5
+netifaces>=0.11

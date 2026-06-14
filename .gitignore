@@ -1,0 +1,7 @@
+soc_events.jsonl
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+*.log
