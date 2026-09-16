@@ -14,19 +14,36 @@ ALERT_EVENTS = {
     "DEVICE_OFFLINE", "PORT_SCAN", "DUPLICATE_MAC", "RISK_DECAY"
 }
 
-# -----------------------------
+
+# ============================================================
 # THREAT LEVEL HELPERS
-# -----------------------------
+# ============================================================
+
 def threat_badge(level):
     styles = {
-        "LOW"     : ("background:#052e16; color:#22c55e; border:1px solid #166534;",  "LOW"),
-        "MEDIUM"  : ("background:#422006; color:#facc15; border:1px solid #854d0e;",  "MEDIUM"),
-        "HIGH"    : ("background:#431407; color:#f97316; border:1px solid #9a3412;",  "HIGH"),
-        "CRITICAL": ("background:#450a0a; color:#ef4444; border:1px solid #991b1b;",  "CRITICAL"),
+        "LOW": (
+            "background:#ecfdf5; color:#047857; "
+            "border:1px solid #6ee7b7;"
+        ),
+        "MEDIUM": (
+            "background:#fffbeb; color:#a16207; "
+            "border:1px solid #fcd34d;"
+        ),
+        "HIGH": (
+            "background:#fff7ed; color:#c2410c; "
+            "border:1px solid #fdba74;"
+        ),
+        "CRITICAL": (
+            "background:#fef2f2; color:#b91c1c; "
+            "border:1px solid #fca5a5;"
+        ),
     }
+
     style, label = styles.get(level, styles["LOW"])
-    return (f'<span style="padding:2px 10px; border-radius:12px; font-size:11px; '
-            f'font-weight:bold; letter-spacing:1px; {style}">{label}</span>')
+
+    return (
+        f'<span class="threat-badge" style="{style}">{label}</span>'
+    )
 
 
 def event_label(event_type):
@@ -42,406 +59,1314 @@ def event_label(event_type):
         cls = "label-decay"
     else:
         cls = "label-info"
+
     return f'<span class="event-label {cls}">{event_type}</span>'
 
 
+# ============================================================
+# MAIN DASHBOARD
+# ============================================================
+
 @app.route("/")
 def home():
+
     try:
-        events  = requests.get(EVENT_SERVER_EVENTS,  timeout=3).json()
-        devices = requests.get(EVENT_SERVER_DEVICES, timeout=3).json()
-        alerts  = requests.get(EVENT_SERVER_ALERTS,  timeout=3).json()
-    except:
+        events = requests.get(
+            EVENT_SERVER_EVENTS,
+            timeout=3
+        ).json()
+
+        devices = requests.get(
+            EVENT_SERVER_DEVICES,
+            timeout=3
+        ).json()
+
+        alerts = requests.get(
+            EVENT_SERVER_ALERTS,
+            timeout=3
+        ).json()
+
+    except Exception:
         return """
-        <!DOCTYPE html><html>
-        <head><title>Sipar Security</title></head>
-        <body style="background:#0b1220;color:white;font-family:Arial;margin:40px;">
-            <h1 style="color:#38bdf8;">SIPAR SECURITY</h1>
-            <p style="color:#ef4444;">Cannot connect to Event Server on port 5050.
-            Make sure event_server.py is running.</p>
-        </body></html>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Sipar Security</title>
+            <style>
+                body {
+                    background:#f8fafc;
+                    color:#111827;
+                    font-family:Arial,sans-serif;
+                    margin:50px;
+                }
+
+                .error-box {
+                    max-width:700px;
+                    margin:auto;
+                    background:white;
+                    border:1px solid #d1d5db;
+                    border-radius:12px;
+                    padding:30px;
+                    box-shadow:0 4px 15px rgba(0,0,0,0.08);
+                }
+
+                h1 {
+                    color:#0369a1;
+                    margin-bottom:10px;
+                }
+
+                .error {
+                    color:#b91c1c;
+                    font-weight:600;
+                }
+            </style>
+        </head>
+
+        <body>
+            <div class="error-box">
+                <h1>SIPAR SECURITY</h1>
+
+                <p>
+                    Network Intrusion Detection System — Version 3.0
+                </p>
+
+                <p class="error">
+                    Cannot connect to Event Server on port 5050.
+                </p>
+
+                <p>
+                    Make sure event_server.py is running.
+                </p>
+            </div>
+        </body>
+        </html>
         """
 
-    # ----------------------------------------
-    # STATS
-    # ----------------------------------------
-    total_devices  = len(devices)
-    total_events   = len(events)
-    online_count   = sum(1 for d in devices.values() if d.get("status") == "ONLINE")
-    offline_count  = sum(1 for d in devices.values() if d.get("status") == "OFFLINE")
-    critical_count = sum(1 for d in devices.values() if d.get("threat_level") == "CRITICAL")
-    high_count     = sum(1 for d in devices.values() if d.get("threat_level") == "HIGH")
+    # ========================================================
+    # STATISTICS
+    # ========================================================
 
-    # ----------------------------------------
-    # DEVICE TABLE ROWS
-    # ----------------------------------------
+    total_devices = len(devices)
+    total_events = len(events)
+
+    online_count = sum(
+        1 for d in devices.values()
+        if d.get("status") == "ONLINE"
+    )
+
+    offline_count = sum(
+        1 for d in devices.values()
+        if d.get("status") == "OFFLINE"
+    )
+
+    critical_count = sum(
+        1 for d in devices.values()
+        if d.get("threat_level") == "CRITICAL"
+    )
+
+    high_count = sum(
+        1 for d in devices.values()
+        if d.get("threat_level") == "HIGH"
+    )
+
+    # ========================================================
+    # DEVICE TABLE
+    # ========================================================
+
     device_rows = ""
-    for ip, info in devices.items():
-        risk          = info.get("risk", 0)
-        status        = info.get("status", "ONLINE")
-        threat_level  = info.get("threat_level", "LOW")
 
-        status_badge = (
-            '<span class="badge-online">ONLINE</span>'
-            if status == "ONLINE"
-            else '<span class="badge-offline">OFFLINE</span>'
-        )
+    for ip, info in devices.items():
+
+        risk = info.get("risk", 0)
+        status = info.get("status", "ONLINE")
+        threat_level = info.get("threat_level", "LOW")
+
+        if status == "ONLINE":
+            status_badge = (
+                '<span class="badge-online">ONLINE</span>'
+            )
+        else:
+            status_badge = (
+                '<span class="badge-offline">OFFLINE</span>'
+            )
 
         device_rows += f"""
         <tr>
-            <td>{ip}</td>
-            <td class="mono">{info.get("mac", "")}</td>
-            <td>{status_badge}</td>
-            <td>{threat_badge(threat_level)}</td>
-            <td>{info.get("first_seen", "—")}</td>
-            <td>{info.get("last_seen",  "—")}</td>
-            <td style="color:#94a3b8;">{risk}</td>
+
+            <td class="ip-cell">
+                {ip}
+            </td>
+
+            <td class="mono">
+                {info.get("mac", "")}
+            </td>
+
             <td>
-                <button class="reset-btn"
+                {status_badge}
+            </td>
+
+            <td>
+                {threat_badge(threat_level)}
+            </td>
+
+            <td class="time-cell">
+                {info.get("first_seen", "—")}
+            </td>
+
+            <td class="time-cell">
+                {info.get("last_seen", "—")}
+            </td>
+
+            <td class="risk-cell">
+                {risk}
+            </td>
+
+            <td>
+                <button
+                    class="reset-btn"
                     onclick="resetRisk('{ip}', this)">
                     Reset
                 </button>
             </td>
+
         </tr>
         """
 
-    # ----------------------------------------
-    # ALERT ROWS
-    # ----------------------------------------
+    # ========================================================
+    # ALERT TABLE
+    # ========================================================
+
     alert_rows = ""
+
     for e in reversed(alerts[-30:]):
+
         alert_rows += f"""
         <tr>
-            <td>{e.get("timestamp", "")}</td>
-            <td>{event_label(e.get("event", ""))}</td>
-            <td>{e.get("ip", "")}</td>
-            <td class="mono">{e.get("mac", "")}</td>
-            <td style="color:#94a3b8; font-size:12px;">{e.get("details", "")}</td>
-            <td style="color:#94a3b8;">{e.get("risk", 0)}</td>
+
+            <td class="time-cell">
+                {e.get("timestamp", "")}
+            </td>
+
+            <td>
+                {event_label(e.get("event", ""))}
+            </td>
+
+            <td class="ip-cell">
+                {e.get("ip", "")}
+            </td>
+
+            <td class="mono">
+                {e.get("mac", "")}
+            </td>
+
+            <td class="details-cell">
+                {e.get("details", "")}
+            </td>
+
+            <td class="risk-cell">
+                {e.get("risk", 0)}
+            </td>
+
         </tr>
         """
+
+    # ========================================================
+    # HTML
+    # ========================================================
 
     html = f"""
     <!DOCTYPE html>
+
     <html>
+
     <head>
-        <title>Sipar Security</title>
-        <meta http-equiv="refresh" content="5">
+
+        <title>Sipar Security — Network Monitor V3</title>
+
+        <meta
+            http-equiv="refresh"
+            content="5"
+        >
+
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
+
         <style>
 
-            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        /* ==================================================
+           GLOBAL
+           ================================================== */
+
+        * {{
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }}
+
+        body {{
+
+            background: #f4f7fa;
+
+            color: #111827;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            font-size: 15px;
+
+            line-height: 1.5;
+
+            padding: 32px;
+
+        }}
+
+
+        /* ==================================================
+           MAIN CONTAINER
+           ================================================== */
+
+        .dashboard-container {{
+
+            max-width: 1800px;
+
+            margin: 0 auto;
+
+        }}
+
+
+        /* ==================================================
+           HEADER
+           ================================================== */
+
+        .header {{
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: space-between;
+
+            background: #ffffff;
+
+            border: 1px solid #dbe3ea;
+
+            border-left: 5px solid #0284c7;
+
+            border-radius: 12px;
+
+            padding: 22px 26px;
+
+            margin-bottom: 24px;
+
+            box-shadow:
+                0 2px 8px rgba(15, 23, 42, 0.05);
+
+        }}
+
+
+        .header h1 {{
+
+            color: #075985;
+
+            font-size: 28px;
+
+            font-weight: 750;
+
+            letter-spacing: 2px;
+
+        }}
+
+
+        .header .subtitle {{
+
+            color: #475569;
+
+            font-size: 14px;
+
+            margin-top: 5px;
+
+            font-weight: 500;
+
+        }}
+
+
+        .live-status {{
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            color: #334155;
+
+            font-size: 14px;
+
+            font-weight: 600;
+
+            background: #f8fafc;
+
+            border: 1px solid #dbe3ea;
+
+            padding: 9px 14px;
+
+            border-radius: 8px;
+
+        }}
+
+
+        .live-dot {{
+
+            width: 10px;
+
+            height: 10px;
+
+            background: #16a34a;
+
+            border-radius: 50%;
+
+            display: inline-block;
+
+        }}
+
+
+        /* ==================================================
+           STATISTICS
+           ================================================== */
+
+        .stats {{
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(6, minmax(130px, 1fr));
+
+            gap: 14px;
+
+            margin-bottom: 24px;
+
+        }}
+
+
+        .stat-card {{
+
+            background: #ffffff;
+
+            border: 1px solid #dbe3ea;
+
+            border-top: 4px solid #94a3b8;
+
+            border-radius: 10px;
+
+            padding: 20px 16px;
+
+            text-align: center;
+
+            min-height: 105px;
+
+            display: flex;
+
+            flex-direction: column;
+
+            justify-content: center;
+
+            box-shadow:
+                0 2px 6px rgba(15, 23, 42, 0.04);
+
+        }}
+
+
+        .stat-card.online {{
+            border-top-color: #16a34a;
+        }}
+
+        .stat-card.offline {{
+            border-top-color: #64748b;
+        }}
+
+        .stat-card.critical {{
+            border-top-color: #dc2626;
+        }}
+
+        .stat-card.high {{
+            border-top-color: #ea580c;
+        }}
+
+        .stat-card.events {{
+            border-top-color: #0284c7;
+        }}
+
+        .stat-card.devices {{
+            border-top-color: #7c3aed;
+        }}
+
+
+        .stat-value {{
+
+            font-size: 30px;
+
+            font-weight: 750;
+
+            color: #111827;
+
+            line-height: 1.1;
+
+        }}
+
+
+        .stat-label {{
+
+            font-size: 12px;
+
+            color: #64748b;
+
+            text-transform: uppercase;
+
+            letter-spacing: 1px;
+
+            margin-top: 7px;
+
+            font-weight: 650;
+
+        }}
+
+
+        /* ==================================================
+           SECTIONS
+           ================================================== */
+
+        .section {{
+
+            background: #ffffff;
+
+            border: 1px solid #dbe3ea;
+
+            border-radius: 12px;
+
+            padding: 22px;
+
+            margin-bottom: 24px;
+
+            box-shadow:
+                0 2px 8px rgba(15, 23, 42, 0.05);
+
+            overflow-x: auto;
+
+        }}
+
+
+        .section h2 {{
+
+            color: #1e3a5f;
+
+            font-size: 16px;
+
+            font-weight: 750;
+
+            text-transform: uppercase;
+
+            letter-spacing: 1px;
+
+            margin-bottom: 18px;
+
+            border-bottom: 2px solid #e2e8f0;
+
+            padding-bottom: 11px;
+
+        }}
+
+
+        /* ==================================================
+           TABLES
+           ================================================== */
+
+        table {{
+
+            width: 100%;
+
+            border-collapse: separate;
+
+            border-spacing: 0;
+
+            min-width: 900px;
+
+        }}
+
+
+        th {{
+
+            background: #eef3f7;
+
+            color: #1e293b;
+
+            padding: 13px 14px;
+
+            text-align: left;
+
+            font-size: 12px;
+
+            font-weight: 750;
+
+            text-transform: uppercase;
+
+            letter-spacing: 0.7px;
+
+            border-top: 1px solid #dbe3ea;
+
+            border-bottom: 2px solid #cbd5e1;
+
+        }}
+
+
+        th:first-child {{
+
+            border-left: 1px solid #dbe3ea;
+
+        }}
+
+
+        th:last-child {{
+
+            border-right: 1px solid #dbe3ea;
+
+        }}
+
+
+        td {{
+
+            padding: 13px 14px;
+
+            border-bottom: 1px solid #e2e8f0;
+
+            color: #1f2937;
+
+            font-size: 14px;
+
+            vertical-align: middle;
+
+        }}
+
+
+        tr:last-child td {{
+
+            border-bottom: 0;
+
+        }}
+
+
+        tbody tr:hover td {{
+
+            background: #f8fafc;
+
+        }}
+
+
+        .ip-cell {{
+
+            font-weight: 650;
+
+            color: #0f172a;
+
+            white-space: nowrap;
+
+        }}
+
+
+        .mono {{
+
+            font-family:
+                "Consolas",
+                "Courier New",
+                monospace;
+
+            font-size: 13px;
+
+            color: #334155;
+
+            white-space: nowrap;
+
+        }}
+
+
+        .time-cell {{
+
+            color: #475569;
+
+            font-size: 13px;
+
+            white-space: nowrap;
+
+        }}
+
+
+        .details-cell {{
+
+            color: #334155;
+
+            font-size: 13px;
+
+            min-width: 260px;
+
+        }}
+
+
+        .risk-cell {{
+
+            color: #111827;
+
+            font-size: 16px;
+
+            font-weight: 750;
+
+            text-align: center;
+
+        }}
+
+
+        /* ==================================================
+           STATUS BADGES
+           ================================================== */
+
+        .badge-online {{
+
+            display: inline-block;
+
+            background: #ecfdf5;
+
+            color: #047857;
+
+            border: 1px solid #6ee7b7;
+
+            padding: 4px 11px;
+
+            border-radius: 12px;
+
+            font-size: 11px;
+
+            font-weight: 750;
+
+            letter-spacing: 0.8px;
+
+        }}
+
+
+        .badge-offline {{
+
+            display: inline-block;
+
+            background: #f1f5f9;
+
+            color: #475569;
+
+            border: 1px solid #cbd5e1;
+
+            padding: 4px 11px;
+
+            border-radius: 12px;
+
+            font-size: 11px;
+
+            font-weight: 750;
+
+            letter-spacing: 0.8px;
+
+        }}
+
+
+        .threat-badge {{
+
+            display: inline-block;
+
+            padding: 4px 11px;
+
+            border-radius: 12px;
+
+            font-size: 11px;
+
+            font-weight: 750;
+
+            letter-spacing: 0.8px;
+
+        }}
+
+
+        /* ==================================================
+           EVENT LABELS
+           ================================================== */
+
+        .event-label {{
+
+            display: inline-block;
+
+            padding: 4px 9px;
+
+            border-radius: 5px;
+
+            font-size: 11px;
+
+            font-weight: 750;
+
+            letter-spacing: 0.4px;
+
+            white-space: nowrap;
+
+        }}
+
+
+        .label-critical {{
+
+            background: #fef2f2;
+
+            color: #b91c1c;
+
+            border: 1px solid #fca5a5;
+
+        }}
+
+
+        .label-high {{
+
+            background: #fff7ed;
+
+            color: #c2410c;
+
+            border: 1px solid #fdba74;
+
+        }}
+
+
+        .label-warn {{
+
+            background: #fffbeb;
+
+            color: #a16207;
+
+            border: 1px solid #fcd34d;
+
+        }}
+
+
+        .label-offline {{
+
+            background: #f1f5f9;
+
+            color: #475569;
+
+            border: 1px solid #cbd5e1;
+
+        }}
+
+
+        .label-info {{
+
+            background: #eff6ff;
+
+            color: #0369a1;
+
+            border: 1px solid #93c5fd;
+
+        }}
+
+
+        .label-decay {{
+
+            background: #ecfdf5;
+
+            color: #047857;
+
+            border: 1px solid #6ee7b7;
+
+        }}
+
+
+        /* ==================================================
+           RESET BUTTON
+           ================================================== */
+
+        .reset-btn {{
+
+            background: #ffffff;
+
+            color: #475569;
+
+            border: 1px solid #94a3b8;
+
+            padding: 6px 12px;
+
+            border-radius: 6px;
+
+            font-size: 12px;
+
+            font-weight: 650;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                color 0.15s ease,
+                border-color 0.15s ease;
+
+        }}
+
+
+        .reset-btn:hover {{
+
+            background: #f1f5f9;
+
+            color: #0f172a;
+
+            border-color: #64748b;
+
+        }}
+
+
+        .reset-btn:disabled {{
+
+            opacity: 0.45;
+
+            cursor: not-allowed;
+
+        }}
+
+
+        /* ==================================================
+           EMPTY STATE
+           ================================================== */
+
+        .empty {{
+
+            text-align: center;
+
+            color: #64748b;
+
+            padding: 40px;
+
+            font-size: 14px;
+
+        }}
+
+
+        /* ==================================================
+           RESPONSIVE DISPLAY
+           ================================================== */
+
+        @media (max-width: 1200px) {{
 
             body {{
-                background: #0b1220;
-                color: #e2e8f0;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                font-size: 14px;
-                padding: 24px;
-            }}
 
-            /* ---- HEADER ---- */
-            .header {{
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 24px;
-                border-bottom: 1px solid #1e293b;
-                padding-bottom: 16px;
-            }}
-
-            .header h1 {{
-                color: #38bdf8;
-                font-size: 22px;
-                letter-spacing: 2px;
-            }}
-
-            .header .subtitle {{
-                color: #64748b;
-                font-size: 12px;
-                margin-top: 4px;
-            }}
-
-            .live-dot {{
-                width: 10px; height: 10px;
-                background: #22c55e;
-                border-radius: 50%;
-                display: inline-block;
-                margin-right: 6px;
-                animation: pulse 1.5s infinite;
-            }}
-
-            @keyframes pulse {{
-                0%, 100% {{ opacity: 1; }}
-                50%       {{ opacity: 0.3; }}
-            }}
-
-            /* ---- STAT CARDS ---- */
-            .stats {{
-                display: grid;
-                grid-template-columns: repeat(6, 1fr);
-                gap: 12px;
-                margin-bottom: 24px;
-            }}
-
-            .stat-card {{
-                background: #1e293b;
-                border-radius: 10px;
-                padding: 16px;
-                text-align: center;
-                border-top: 3px solid #334155;
-            }}
-
-            .stat-card.online   {{ border-top-color: #22c55e; }}
-            .stat-card.offline  {{ border-top-color: #64748b; }}
-            .stat-card.critical {{ border-top-color: #ef4444; }}
-            .stat-card.high     {{ border-top-color: #f97316; }}
-            .stat-card.events   {{ border-top-color: #38bdf8; }}
-            .stat-card.devices  {{ border-top-color: #a78bfa; }}
-
-            .stat-value {{
-                font-size: 28px;
-                font-weight: bold;
-                color: white;
-            }}
-
-            .stat-label {{
-                font-size: 11px;
-                color: #64748b;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                margin-top: 4px;
-            }}
-
-            /* ---- SECTION ---- */
-            .section {{
-                background: #1e293b;
-                border-radius: 10px;
                 padding: 20px;
-                margin-bottom: 20px;
+
             }}
 
-            .section h2 {{
-                color: #94a3b8;
-                font-size: 13px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                margin-bottom: 16px;
-                border-bottom: 1px solid #334155;
-                padding-bottom: 10px;
+            .stats {{
+
+                grid-template-columns:
+                    repeat(3, 1fr);
+
             }}
 
-            /* ---- TABLES ---- */
-            table {{ width: 100%; border-collapse: collapse; }}
+        }}
 
-            th {{
-                background: #0f172a;
-                color: #64748b;
-                padding: 10px 12px;
-                text-align: left;
-                font-size: 11px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
+
+        @media (max-width: 700px) {{
+
+            body {{
+
+                padding: 12px;
+
             }}
 
-            td {{
-                padding: 10px 12px;
-                border-bottom: 1px solid #0f172a;
-                color: #cbd5e1;
+            .header {{
+
+                flex-direction: column;
+
+                align-items: flex-start;
+
+                gap: 16px;
+
             }}
 
-            tr:last-child td {{ border-bottom: none; }}
-            tr:hover td {{ background: #0f172a; }}
+            .stats {{
 
-            .mono {{ font-family: monospace; font-size: 12px; color: #94a3b8; }}
+                grid-template-columns:
+                    repeat(2, 1fr);
 
-            /* ---- STATUS BADGES ---- */
-            .badge-online {{
-                background: #14532d; color: #22c55e;
-                padding: 2px 10px; border-radius: 12px;
-                font-size: 11px; font-weight: bold; letter-spacing: 1px;
             }}
 
-            .badge-offline {{
-                background: #1e293b; color: #64748b;
-                padding: 2px 10px; border-radius: 12px;
-                font-size: 11px; font-weight: bold; letter-spacing: 1px;
-                border: 1px solid #334155;
+            .section {{
+
+                padding: 15px;
+
             }}
 
-            /* ---- EVENT LABELS ---- */
-            .event-label {{
-                padding: 2px 8px; border-radius: 4px;
-                font-size: 11px; font-weight: bold; letter-spacing: 0.5px;
-            }}
-
-            .label-critical {{ background: #450a0a; color: #ef4444; }}
-            .label-high     {{ background: #431407; color: #f97316; }}
-            .label-warn     {{ background: #422006; color: #facc15; }}
-            .label-offline  {{ background: #1e293b; color: #94a3b8; border: 1px solid #334155; }}
-            .label-info     {{ background: #0c1a2e; color: #38bdf8; }}
-            .label-decay    {{ background: #052e16; color: #4ade80; border: 1px solid #166534; }}
-
-            /* ---- RESET BUTTON ---- */
-            .reset-btn {{
-                background: #1e293b;
-                color: #64748b;
-                border: 1px solid #334155;
-                padding: 3px 10px;
-                border-radius: 6px;
-                font-size: 11px;
-                cursor: pointer;
-                transition: all 0.2s;
-            }}
-
-            .reset-btn:hover {{
-                background: #334155;
-                color: #e2e8f0;
-            }}
-
-            .reset-btn:disabled {{
-                opacity: 0.4;
-                cursor: not-allowed;
-            }}
-
-            /* ---- EMPTY STATE ---- */
-            .empty {{
-                text-align: center;
-                color: #334155;
-                padding: 30px;
-                font-size: 13px;
-            }}
+        }}
 
         </style>
+
     </head>
+
+
     <body>
 
-    <!-- HEADER -->
-    <div class="header">
-        <div>
-            <h1>SIPAR SECURITY</h1>
-            <div class="subtitle">Network Intrusion Detection System — Version 3.0</div>
-        </div>
-        <div style="color:#64748b; font-size:12px;">
-            <span class="live-dot"></span> Live — refreshes every 5s
-        </div>
-    </div>
+        <div class="dashboard-container">
 
-    <!-- STAT CARDS -->
-    <div class="stats">
-        <div class="stat-card devices">
-            <div class="stat-value">{total_devices}</div>
-            <div class="stat-label">Total Devices</div>
-        </div>
-        <div class="stat-card online">
-            <div class="stat-value">{online_count}</div>
-            <div class="stat-label">Online</div>
-        </div>
-        <div class="stat-card offline">
-            <div class="stat-value">{offline_count}</div>
-            <div class="stat-label">Offline</div>
-        </div>
-        <div class="stat-card high">
-            <div class="stat-value">{high_count}</div>
-            <div class="stat-label">High</div>
-        </div>
-        <div class="stat-card critical">
-            <div class="stat-value">{critical_count}</div>
-            <div class="stat-label">Critical</div>
-        </div>
-        <div class="stat-card events">
-            <div class="stat-value">{total_events}</div>
-            <div class="stat-label">Total Events</div>
-        </div>
-    </div>
 
-    <!-- DEVICE INVENTORY -->
-    <div class="section">
-        <h2>Device Inventory</h2>
-        <table>
-            <tr>
-                <th>IP Address</th>
-                <th>MAC Address</th>
-                <th>Status</th>
-                <th>Threat Level</th>
-                <th>First Seen</th>
-                <th>Last Seen</th>
-                <th>Risk</th>
-                <th>Action</th>
-            </tr>
-            {'<tr><td colspan="8" class="empty">No devices discovered yet.</td></tr>' if not device_rows else device_rows}
-        </table>
-    </div>
+            <!-- ==========================================
+                 HEADER
+                 ========================================== -->
 
-    <!-- SECURITY ALERTS -->
-    <div class="section">
-        <h2>Security Alerts — Last 30</h2>
-        <table>
-            <tr>
-                <th>Timestamp</th>
-                <th>Event</th>
-                <th>IP</th>
-                <th>MAC</th>
-                <th>Details</th>
-                <th>Risk</th>
-            </tr>
-            {'<tr><td colspan="6" class="empty">No security alerts recorded.</td></tr>' if not alert_rows else alert_rows}
-        </table>
-    </div>
+            <div class="header">
 
-    <script>
-    function resetRisk(ip, btn) {{
-        btn.disabled = true;
-        btn.textContent = '...';
+                <div>
 
-        fetch('/reset_device', {{
-            method: 'POST',
-            headers: {{'Content-Type': 'application/json'}},
-            body: JSON.stringify({{ip: ip}})
-        }})
-        .then(r => r.json())
-        .then(data => {{
-            if (data.status === 'ok') {{
-                btn.textContent = 'Done';
-                btn.style.color = '#22c55e';
-                setTimeout(() => location.reload(), 800);
-            }} else {{
+                    <h1>
+                        SIPAR SECURITY
+                    </h1>
+
+                    <div class="subtitle">
+                        Network Intrusion Detection System — Version 3.0
+                    </div>
+
+                </div>
+
+
+                <div class="live-status">
+
+                    <span class="live-dot"></span>
+
+                    <span>
+                        Live — refreshes every 5s
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==========================================
+                 STATISTICS
+                 ========================================== -->
+
+            <div class="stats">
+
+
+                <div class="stat-card devices">
+
+                    <div class="stat-value">
+                        {total_devices}
+                    </div>
+
+                    <div class="stat-label">
+                        Total Devices
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card online">
+
+                    <div class="stat-value">
+                        {online_count}
+                    </div>
+
+                    <div class="stat-label">
+                        Online
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card offline">
+
+                    <div class="stat-value">
+                        {offline_count}
+                    </div>
+
+                    <div class="stat-label">
+                        Offline
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card high">
+
+                    <div class="stat-value">
+                        {high_count}
+                    </div>
+
+                    <div class="stat-label">
+                        High
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card critical">
+
+                    <div class="stat-value">
+                        {critical_count}
+                    </div>
+
+                    <div class="stat-label">
+                        Critical
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card events">
+
+                    <div class="stat-value">
+                        {total_events}
+                    </div>
+
+                    <div class="stat-label">
+                        Total Events
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==========================================
+                 DEVICE INVENTORY
+                 ========================================== -->
+
+            <div class="section">
+
+                <h2>
+                    Device Inventory
+                </h2>
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+
+                            <th>IP Address</th>
+
+                            <th>MAC Address</th>
+
+                            <th>Status</th>
+
+                            <th>Threat Level</th>
+
+                            <th>First Seen</th>
+
+                            <th>Last Seen</th>
+
+                            <th>Risk</th>
+
+                            <th>Action</th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                        {
+                            '<tr><td colspan="8" class="empty">No devices discovered yet.</td></tr>'
+                            if not device_rows
+                            else device_rows
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+
+            <!-- ==========================================
+                 SECURITY ALERTS
+                 ========================================== -->
+
+            <div class="section">
+
+                <h2>
+                    Security Alerts — Last 30
+                </h2>
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+
+                            <th>Timestamp</th>
+
+                            <th>Event</th>
+
+                            <th>IP</th>
+
+                            <th>MAC</th>
+
+                            <th>Details</th>
+
+                            <th>Risk</th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                        {
+                            '<tr><td colspan="6" class="empty">No security alerts recorded.</td></tr>'
+                            if not alert_rows
+                            else alert_rows
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+
+        </div>
+
+
+        <!-- ==============================================
+             RESET RISK SCRIPT
+             ============================================== -->
+
+        <script>
+
+        function resetRisk(ip, btn) {{
+
+            btn.disabled = true;
+
+            btn.textContent = '...';
+
+
+            fetch('/reset_device', {{
+
+                method: 'POST',
+
+                headers: {{
+                    'Content-Type': 'application/json'
+                }},
+
+                body: JSON.stringify({{
+                    ip: ip
+                }})
+
+            }})
+
+            .then(r => r.json())
+
+            .then(data => {{
+
+                if (data.status === 'ok') {{
+
+                    btn.textContent = 'Done';
+
+                    btn.style.color = '#047857';
+
+                    setTimeout(
+                        () => location.reload(),
+                        800
+                    );
+
+                }}
+
+                else {{
+
+                    btn.textContent = 'Error';
+
+                    btn.style.color = '#b91c1c';
+
+                    btn.disabled = false;
+
+                }}
+
+            }})
+
+            .catch(() => {{
+
                 btn.textContent = 'Error';
-                btn.style.color = '#ef4444';
+
+                btn.style.color = '#b91c1c';
+
                 btn.disabled = false;
-            }}
-        }})
-        .catch(() => {{
-            btn.textContent = 'Error';
-            btn.style.color = '#ef4444';
-            btn.disabled = false;
-        }});
-    }}
-    </script>
+
+            }});
+
+        }}
+
+        </script>
 
     </body>
+
     </html>
     """
+
     return html
 
 
-# -----------------------------
+# ============================================================
 # RESET PROXY ROUTE
 # dashboard -> event_server /reset/<ip>
-# -----------------------------
+# ============================================================
+
 @app.route("/reset_device", methods=["POST"])
 def reset_device():
-    from flask import request, jsonify
-    data = request.json or {}
-    ip   = data.get("ip", "")
-    if not ip:
-        return jsonify({"status": "error", "message": "no ip provided"}), 400
-    try:
-        resp = requests.post(f"{EVENT_SERVER_RESET}/{ip}", timeout=3)
-        return jsonify(resp.json())
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
 
+    from flask import request, jsonify
+
+    data = request.json or {}
+
+    ip = data.get("ip", "")
+
+    if not ip:
+
+        return jsonify({
+            "status": "error",
+            "message": "no ip provided"
+        }), 400
+
+    try:
+
+        resp = requests.post(
+            f"{EVENT_SERVER_RESET}/{ip}",
+            timeout=3
+        )
+
+        return jsonify(resp.json())
+
+    except Exception as e:
+
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+# ============================================================
+# START DASHBOARD
+# ============================================================
 
 if __name__ == "__main__":
-    print("[+] Dashboard running at http://127.0.0.1:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+
+    print(
+        "[+] Dashboard running at "
+        "http://127.0.0.1:5000"
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=False
+    )
