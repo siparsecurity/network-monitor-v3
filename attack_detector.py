@@ -131,7 +131,7 @@ def _handle_packet(pkt):
 
         if pkt.haslayer(TCP):
             # Only care about SYN packets (new connection attempts)
-            if pkt[TCP].flags & 0x02:
+            if (pkt[TCP].flags & 0x12) == 0x02:
                 port = pkt[TCP].dport
 
         elif pkt.haslayer(UDP):
