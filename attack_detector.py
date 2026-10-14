@@ -239,3 +239,77 @@ def start_port_scan_detector(interface=None):
     t = threading.Thread(target=_sniff, daemon=True, name="PortScanDetector")
     t.start()
     return t
+
+
+# ============================================================
+# PASSIVE ARP SPOOF DETECTION
+# ============================================================
+# Sniffs ARP replies directly instead of relying on the scan.
+# If two different MACs claim the same IP inside
+# ARP_CONFLICT_WINDOW seconds, that is an ARP conflict.
+# (A normal spoof has only 2 MACs: the real device and the attacker.)
+
+# State: ip -> {mac: last_seen_timestamp}
+_arp_claims = defaultdict(dict)
+_arp_alerted_at = {}
+_arp_lock = threading.Lock()
+ARP_CONFLICT_WINDOW   = 30   # seconds
+ARP_CONFLICT_COOLDOWN = 60   # seconds
+
+
+def _handle_arp(pkt):
+    """Scapy callback for every captured ARP packet."""
+    try:
+        from scapy.all import ARP
+
+        if not pkt.haslayer(ARP) or pkt[ARP].op != 2:   # 2 = is-at (reply)
+            return
+
+        ip  = pkt[ARP].psrc
+        mac = pkt[ARP].hwsrc.lower()
+        if not ip or ip == "0.0.0.0":
+            return
+
+        now = time.time()
+        with _arp_lock:
+            claims = _arp_claims[ip]
+            claims[mac] = now
+
+            # Forget claims older than the window
+            for m in [m for m, t in claims.items() if now - t > ARP_CONFLICT_WINDOW]:
+                del claims[m]
+
+            if len(claims) >= 2:
+                last_alert = _arp_alerted_at.get(ip, 0)
+                if now - last_alert > ARP_CONFLICT_COOLDOWN:
+                    macs    = sorted(claims)
+                    details = (
+                        f"Passive: {len(macs)} MACs claimed {ip} "
+                        f"within {ARP_CONFLICT_WINDOW}s: {macs}"
+                    )
+                    print(f"[ALERT] ARP_SPOOF (passive): {ip} | {details}")
+                    send_event("ARP_SPOOF_MEDIUM", ip, mac, details)
+                    _arp_alerted_at[ip] = now
+
+    except Exception:
+        pass
+
+
+def start_arp_sniffer(interface=None):
+    """Start the passive ARP sniffer in a background daemon thread."""
+    def _sniff():
+        import platform
+        from scapy.all import sniff
+
+        kwargs = {"filter": "arp", "prn": _handle_arp, "store": False}
+        if interface and platform.system() != "Windows":
+            kwargs["iface"] = interface
+        try:
+            sniff(**kwargs)
+        except Exception as e:
+            print(f"[!] Passive ARP sniffer error: {e}")
+
+    t = threading.Thread(target=_sniff, daemon=True, name="ARPSniffer")
+    t.start()
+    print("[+] Passive ARP sniffer listening")
+    return t

@@ -6,7 +6,7 @@ import requests
 import platform
 from collections import defaultdict
 from threat_engine import get_risk_score
-from attack_detector import check_duplicate_mac, start_port_scan_detector
+from attack_detector import check_duplicate_mac, start_port_scan_detector, start_arp_sniffer
 
 # -----------------------------
 # PLATFORM DETECTION
@@ -150,6 +150,7 @@ print(f"[+] {len(trusted_macs)} trusted MACs recorded")
 
 # Start port scan detector in background thread
 start_port_scan_detector(interface=iface)
+start_arp_sniffer(interface=iface)
 
 print("\n[+] IDS Running...\n")
 
