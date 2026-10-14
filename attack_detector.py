@@ -48,13 +48,14 @@ def send_event(event, ip, mac="", details="", risk=None):
 # DUPLICATE MAC DETECTION
 # ============================================================
 # State: track which IPs each MAC has been seen on
-# mac -> set of IPs
-_mac_to_ips = defaultdict(set)
+# mac -> {ip: last_seen_timestamp}  (kept across scans)
+_mac_ip_seen = defaultdict(dict)
 
 # Cooldown: mac -> last alert timestamp
 # Prevents the same duplicate MAC from spamming alerts
 _dup_mac_alerted_at = {}
 DUP_MAC_COOLDOWN = 60   # seconds
+DUP_MAC_WINDOW   = 60   # seconds: rolling window across scans
 
 
 def check_duplicate_mac(scan_result: dict):
@@ -71,19 +72,28 @@ def check_duplicate_mac(scan_result: dict):
     """
     now = time.time()
 
-    # Build inverted map: mac -> list of IPs from this scan
-    mac_to_ips_now = defaultdict(list)
+    # Remember when each (mac, ip) pair was last seen, across scans
     for ip, mac in scan_result.items():
         if mac:
-            mac_to_ips_now[mac].append(ip)
+            _mac_ip_seen[mac][ip] = now
 
-    for mac, ips in mac_to_ips_now.items():
+    for mac in list(_mac_ip_seen):
+        # Keep only IPs seen inside the rolling window
+        _mac_ip_seen[mac] = {
+            ip: t for ip, t in _mac_ip_seen[mac].items()
+            if now - t <= DUP_MAC_WINDOW
+        }
+        ips = list(_mac_ip_seen[mac])
+        if not ips:
+            del _mac_ip_seen[mac]
+            continue
+
         if len(ips) >= 2:
             last_alert = _dup_mac_alerted_at.get(mac, 0)
 
             if now - last_alert > DUP_MAC_COOLDOWN:
                 ip_list = ", ".join(sorted(ips))
-                details = f"MAC {mac} seen on {len(ips)} IPs simultaneously: {ip_list}"
+                details = f"MAC {mac} seen on {len(ips)} IPs within {DUP_MAC_WINDOW}s: {ip_list}"
 
                 print(f"[ALERT] DUPLICATE MAC: {details}")
 
