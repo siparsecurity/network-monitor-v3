@@ -20,6 +20,7 @@ import requests
 EVENT_SERVER        = "http://127.0.0.1:5050/push"
 PORT_SCAN_WINDOW    = 10    # seconds to watch for port scan activity
 PORT_SCAN_THRESHOLD = 5     # distinct ports within window = port scan
+COUNT_UDP           = False  # UDP has no SYN flag; counting it causes false positives
 
 # -----------------------------
 # EVENT SENDER
@@ -134,7 +135,7 @@ def _handle_packet(pkt):
             if (pkt[TCP].flags & 0x12) == 0x02:
                 port = pkt[TCP].dport
 
-        elif pkt.haslayer(UDP):
+        elif COUNT_UDP and pkt.haslayer(UDP):
             port = pkt[UDP].dport
 
         if port is None:
