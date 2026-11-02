@@ -39,7 +39,8 @@ def threat_badge(level):
         ),
     }
 
-    style, label = styles.get(level, styles["LOW"])
+    style = styles.get(level, styles["LOW"])
+    label = level
 
     return (
         f'<span class="threat-badge" style="{style}">{label}</span>'
